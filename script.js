@@ -316,82 +316,101 @@ contactForm.addEventListener("submit", function (e) {
     `*የሚፈልጉት ቀን:* ${date}\n` +
     `*መልእክት:* ${message}`
 
-  const proxyUrl = "https://api.allorigins.win/raw?url="
   const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`
-  const fullUrl = proxyUrl + encodeURIComponent(telegramUrl)
 
-  // Send to Telegram bot using POST method
-  fetch(fullUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: text,
-      parse_mode: "Markdown",
-    }),
-  })
-    .then((response) => {
-      console.log("[v0] Response status:", response.status)
-      return response.json()
-    })
-    .then((data) => {
-      console.log("[v0] Telegram API response:", data)
-      if (data.ok) {
-        // Show success notification after 2 seconds
-        setTimeout(() => {
-          showNotification(
-            `እናመሰግናለን, ${name}! ያስያዙትን ቀጠሮ ተቀብለናል፡፡ ያስያዙትን ${serviceText.split(" - ")[0]} ቀጠሮ ለማረጋገጥ ወደዚህ ${phone} ስልክ ቁጥር እንደውላለን።`,
-            "success",
-          )
-          // Reset form
-          this.reset()
-          submitBtn.innerHTML = originalText
-          submitBtn.disabled = false
-        }, 2000)
-      } else {
-        console.error("[v0] Telegram API error:", data)
-        showNotification("Failed to send appointment. Please try again later.", "error")
-        submitBtn.innerHTML = originalText
-        submitBtn.disabled = false
+  // Array of reliable proxy services
+  const proxies = [
+    "https://api.codetabs.com/v1/proxy?quest=",
+    "https://cors-proxy.htmldriven.com/?url=",
+    "https://api.allorigins.win/raw?url=",
+    "https://corsproxy.io/?",
+    "https://cors.eu.org/",
+    "https://proxy.cors.sh/",
+  ]
+
+  const requestData = {
+    chat_id: chatId,
+    text: text,
+    parse_mode: "Markdown",
+  }
+
+  // Function to try sending with different proxies
+  async function tryProxies(proxyIndex = 0) {
+    if (proxyIndex >= proxies.length) {
+      // If all proxies fail, try direct request as last resort
+      console.log("[v0] All proxies failed, trying direct request...")
+      try {
+        const response = await fetch(telegramUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestData),
+        })
+        const data = await response.json()
+        if (data.ok) {
+          handleSuccess()
+        } else {
+          throw new Error("Direct request failed")
+        }
+      } catch (error) {
+        console.error("[v0] Direct request also failed:", error)
+        handleError()
       }
-    })
-    .catch((error) => {
-      console.error("[v0] Network error:", error)
-      const altProxyUrl = "https://corsproxy.io/?"
-      const altFullUrl = altProxyUrl + encodeURIComponent(telegramUrl)
+      return
+    }
 
-      fetch(altFullUrl, {
+    const proxy = proxies[proxyIndex]
+    const fullUrl = proxy + encodeURIComponent(telegramUrl)
+
+    console.log(`[v0] Trying proxy ${proxyIndex + 1}/${proxies.length}: ${proxy}`)
+
+    try {
+      const response = await fetch(fullUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: text,
-          parse_mode: "Markdown",
-        }),
+        body: JSON.stringify(requestData),
       })
-        .then((response) => response.json())
-        .then((data) => {
-          if (data.ok) {
-            setTimeout(() => {
-              showNotification(`እናመሰግናለን, ${name}! ያስያዙትን ቀጠሮ ተቀብለናል፡፡`, "success")
-              this.reset()
-              submitBtn.innerHTML = originalText
-              submitBtn.disabled = false
-            }, 2000)
-          } else {
-            throw new Error("Alternative proxy also failed")
-          }
-        })
-        .catch(() => {
-          showNotification("Error sending appointment. Please try again later.", "error")
-          submitBtn.innerHTML = originalText
-          submitBtn.disabled = false
-        })
-    })
+
+      const data = await response.json()
+      console.log(`[v0] Proxy ${proxyIndex + 1} response:`, data)
+
+      if (data.ok) {
+        console.log(`[v0] Success with proxy ${proxyIndex + 1}`)
+        handleSuccess()
+      } else {
+        throw new Error(`Proxy ${proxyIndex + 1} returned error: ${data.description || "Unknown error"}`)
+      }
+    } catch (error) {
+      console.error(`[v0] Proxy ${proxyIndex + 1} failed:`, error)
+      // Try next proxy
+      tryProxies(proxyIndex + 1)
+    }
+  }
+
+  function handleSuccess() {
+    setTimeout(() => {
+      showNotification(
+        `እናመሰግናለን, ${name}! ያስያዙትን ቀጠሮ ተቀብለናል፡፡ ያስያዙትን ${serviceText.split(" - ")[0]} ቀጠሮ ለማረጋገጥ ወደዚህ ${phone} ስልክ ቁጥር እንደውላለን።`,
+        "success",
+      )
+      // Reset form
+      contactForm.reset()
+      submitBtn.innerHTML = originalText
+      submitBtn.disabled = false
+    }, 1000)
+  }
+
+  function handleError() {
+    showNotification("Failed to send appointment. Please try again later.", "error")
+    submitBtn.innerHTML = originalText
+    submitBtn.disabled = false
+  }
+
+  // Start trying proxies
+  tryProxies()
 })
 
 // Notification System
