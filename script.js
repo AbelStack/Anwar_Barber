@@ -316,31 +316,28 @@ contactForm.addEventListener("submit", function (e) {
     `*የሚፈልጉት ቀን:* ${date}\n` +
     `*መልእክት:* ${message}`
 
+  const proxyUrl = "https://api.allorigins.win/raw?url="
   const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`
-  const corsProxy = "https://cors-anywhere.herokuapp.com/"
+  const fullUrl = proxyUrl + encodeURIComponent(telegramUrl)
 
-  // Alternative CORS proxies you can try if one doesn't work:
-  // const corsProxy = 'https://api.allorigins.win/raw?url='
-  // const corsProxy = 'https://corsproxy.io/?'
-
-  const proxyUrl = corsProxy + telegramUrl
-
-  const requestBody = {
-    chat_id: chatId,
-    parse_mode: "Markdown",
-    text: text,
-  }
-
-  // Send to Telegram bot using POST method with CORS proxy
-  fetch(proxyUrl, {
+  // Send to Telegram bot using POST method
+  fetch(fullUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: text,
+      parse_mode: "Markdown",
+    }),
   })
-    .then((response) => response.json())
+    .then((response) => {
+      console.log("[v0] Response status:", response.status)
+      return response.json()
+    })
     .then((data) => {
+      console.log("[v0] Telegram API response:", data)
       if (data.ok) {
         // Show success notification after 2 seconds
         setTimeout(() => {
@@ -354,17 +351,46 @@ contactForm.addEventListener("submit", function (e) {
           submitBtn.disabled = false
         }, 2000)
       } else {
+        console.error("[v0] Telegram API error:", data)
         showNotification("Failed to send appointment. Please try again later.", "error")
         submitBtn.innerHTML = originalText
         submitBtn.disabled = false
-        console.error(data)
       }
     })
     .catch((error) => {
-      showNotification("Error sending appointment. Please try again later.", "error")
-      submitBtn.innerHTML = originalText
-      submitBtn.disabled = false
-      console.error("Error:", error)
+      console.error("[v0] Network error:", error)
+      const altProxyUrl = "https://corsproxy.io/?"
+      const altFullUrl = altProxyUrl + encodeURIComponent(telegramUrl)
+
+      fetch(altFullUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: text,
+          parse_mode: "Markdown",
+        }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.ok) {
+            setTimeout(() => {
+              showNotification(`እናመሰግናለን, ${name}! ያስያዙትን ቀጠሮ ተቀብለናል፡፡`, "success")
+              this.reset()
+              submitBtn.innerHTML = originalText
+              submitBtn.disabled = false
+            }, 2000)
+          } else {
+            throw new Error("Alternative proxy also failed")
+          }
+        })
+        .catch(() => {
+          showNotification("Error sending appointment. Please try again later.", "error")
+          submitBtn.innerHTML = originalText
+          submitBtn.disabled = false
+        })
     })
 })
 
